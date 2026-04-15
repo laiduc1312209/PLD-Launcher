@@ -1,19 +1,6 @@
 import sys
 import os
 
-# --- Robust Fix for 'SixMetaPathImporter' error ---
-if getattr(sys, 'frozen', False):
-    import types
-    # Fake the six.moves module if it's causing issues with botocore/boto3
-    if 'six.moves' not in sys.modules:
-        m = types.ModuleType('six.moves')
-        sys.modules['six.moves'] = m
-    # Pre-import botocore before any other potential conflicts
-    try:
-        import botocore  # noqa: F401
-    except ImportError:
-        pass
-
 from PySide6.QtCore import QLockFile, QDir, Qt
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialog, QVBoxLayout, QLabel, QProgressBar

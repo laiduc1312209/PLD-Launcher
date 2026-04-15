@@ -31,14 +31,12 @@ jobs:
           pyinstaller --clean --noconfirm --onefile --windowed `
             --icon=icon.ico `
             --add-data "icon.ico;." `
-            --hidden-import six `
-            --collect-all boto3 `
-            --collect-all botocore `
             main.py
 
       - name: Package Release (main.exe + icon.ico → PLD-Launcher.zip)
         run: |
           Copy-Item "icon.ico" "dist/"
+          # Nén file vào zip
           Compress-Archive -Path "dist/main.exe", "dist/icon.ico" -DestinationPath "PLD-Launcher.zip"
 
       - name: Create GitHub Release
