@@ -1,4 +1,3 @@
 PySide6-Fluent-Widgets
 pymongo[srv]
-bcrypt
 boto3

@@ -16,67 +16,65 @@ from ui_window import PLDLauncher
 from ui_auth import AuthPage
 from auth_manager import AuthManager
 
-# Global reference for single-instance lock
-_LOCK_FILE = None
+def resource_path(relative_path):
+    """Resolve path for both dev and PyInstaller frozen mode."""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, relative_path)
 
-class MandatoryUpdateDialog(QDialog):
-    """Bảng thông báo bắt buộc cập nhật nếu có bản mới."""
-    def __init__(self, version, download_url, changelog, parent=None):
+class UpdateRedirectDialog(QDialog):
+    """Thông báo người dùng cần chạy Update.exe để cập nhật."""
+    def __init__(self, version, parent=None):
         super().__init__(parent)
-        self.download_url = download_url
-        self.setWindowTitle("PLD Launcher - Cập nhật bắt buộc")
-        self.setFixedSize(400, 250)
+        self.setWindowTitle("PLD Launcher - Yêu cầu cập nhật")
+        self.setFixedSize(400, 260)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowTitleHint)
-        self.setStyleSheet("QDialog { background-color: #2d2d2d; color: white; }")
+        self.setStyleSheet("QDialog { background-color: #2d2d2d; color: white; border-radius: 12px; }")
         
+        # Set icon for redirect dialog
+        icon_path = resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            from PySide6.QtGui import QIcon
+            self.setWindowIcon(QIcon(icon_path))
+
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(30, 30, 30, 30)
-        lay.setSpacing(20)
+        lay.setContentsMargins(30, 20, 30, 30)
+        lay.setSpacing(15)
+
+        # Big Icon
+        if os.path.exists(icon_path):
+            from qfluentwidgets import IconWidget
+            logo = IconWidget(icon_path, self)
+            logo.setFixedSize(40, 40)
+            lay.addWidget(logo, alignment=Qt.AlignmentFlag.AlignCenter)
 
         title = SubtitleLabel(f"Phiên bản mới: v{version}")
         title.setTextColor("white")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(title)
 
-        desc = QLabel(f"Nội dung: {changelog}")
+        desc = QLabel("Bạn đang khởi chạy trực tiếp Launcher.\nVui lòng chạy Update.exe để cập nhật bản mới nhất.")
         desc.setWordWrap(True)
         desc.setStyleSheet("color: #bbbbbb;")
         lay.addWidget(desc)
 
-        self.progress = ProgressBar(self)
-        self.progress.hide()
-        lay.addWidget(self.progress)
-
-        self.status_lbl = QLabel("Vui lòng cập nhật để tiếp tục sử dụng.")
-        self.status_lbl.setStyleSheet("color: #bbbbbb;")
-        lay.addWidget(self.status_lbl)
-
-        self.btn = PrimaryPushButton("CẬP NHẬT NGAY", self)
-        self.btn.clicked.connect(self.start_download)
+        self.btn = PrimaryPushButton("MỞ UPDATE.EXE NGAY", self)
+        self.btn.clicked.connect(self.launch_update_and_exit)
         lay.addWidget(self.btn)
 
-    def start_download(self):
-        self.btn.setEnabled(False)
-        self.progress.show()
-        self.worker = DownloadUpdateWorker(self.download_url)
-        self.worker.progress.connect(self.progress.setValue)
-        self.worker.status.connect(self.status_lbl.setText)
-        self.worker.finished.connect(self.handle_finished)
-        self.worker.start()
-
-    def handle_finished(self, success, path_or_err):
-        if success:
-            self.status_lbl.setText("Đang khởi động lại...")
-            apply_update(path_or_err)
-            
-            # GIẢI PHÁP: Nhả khóa trước khi khởi động lại
-            global _LOCK_FILE
-            if _LOCK_FILE:
-                _LOCK_FILE.unlock()
-                
-            restart_app()
+    def launch_update_and_exit(self):
+        update_exe = "bootstrapper.exe" if getattr(sys, 'frozen', False) else "bootstrapper.py"
+        
+        if getattr(sys, 'frozen', False):
+            path = os.path.join(os.path.dirname(sys.executable), update_exe)
+            if os.path.exists(path):
+                subprocess.Popen([path])
         else:
-            QMessageBox.critical(self, "Lỗi", f"Không thể cập nhật: {path_or_err}")
-            sys.exit(1)
+            subprocess.Popen([sys.executable, update_exe])
+            
+        sys.exit(0)
 
 
 def main():
@@ -110,16 +108,13 @@ def main():
     setTheme(Theme.DARK)
     setThemeColor('#8b5cf6')  # Violet primary accent
 
-    # Default font
     font = QFont("Segoe UI Variable Display", 10)
     font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(font)
 
     auth_mgr = AuthManager()
-    main_window = None
-
+    
     def launch_actual_app():
-        nonlocal main_window
         if not auth_mgr.is_logged_in():
             auth_page = AuthPage()
             auth_page.auth_success.connect(lambda: [auth_page.close(), launch_main_window()])
@@ -128,30 +123,22 @@ def main():
             launch_main_window()
 
     def launch_main_window():
-        nonlocal main_window
+        global main_window
         main_window = PLDLauncher()
         main_window.show()
 
-    # --- Mandatory Update Check ---
+    # --- Update Check ---
     update_checker = CheckUpdateWorker()
 
     def on_update_found(ver, url, log):
-        dlg = MandatoryUpdateDialog(ver, url, log)
+        dlg = UpdateRedirectDialog(ver)
         dlg.exec()
-
-    def on_no_update():
-        launch_actual_app()
-
-    def on_error(err):
-        # Nếu lỗi mạng, có thể cho qua hoặc bắt buộc dừng tùy ý bạn.
-        # Ở đây mình cho qua để người dùng vẫn vào được nếu offline.
-        launch_actual_app()
+        sys.exit(0) # Exit launcher to force update
 
     update_checker.update_available.connect(on_update_found)
-    update_checker.no_update.connect(on_no_update)
-    update_checker.error.connect(on_error)
+    update_checker.no_update.connect(launch_actual_app)
+    update_checker.error.connect(launch_actual_app)
     
-    # Bắt đầu kiểm tra update ngầm ngay khi app bật
     update_checker.start()
 
     sys.exit(app.exec())

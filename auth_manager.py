@@ -4,7 +4,8 @@ Handles secure authentication using MongoDB Atlas and Bcrypt.
 """
 import os
 import json
-import bcrypt
+import hashlib
+import secrets
 from pymongo import MongoClient
 from config import MONGODB_URI, DB_NAME
 
@@ -55,6 +56,39 @@ class AuthManager:
     def is_logged_in(self) -> bool:
         return self.session is not None
 
+    def _hash_password(self, password, salt=None):
+        """Hashes password using PBKDF2 with SHA256."""
+        if salt is None:
+            salt = secrets.token_hex(16)
+        
+        # iterations=100000 is robust enough
+        phash = hashlib.pbkdf2_hmac(
+            'sha256', 
+            password.encode('utf-8'), 
+            salt.encode('utf-8'), 
+            100000
+        ).hex()
+        return f"pbkdf2_sha256$100000${salt}${phash}"
+
+    def _verify_password(self, password, stored_value):
+        """Verifies a password against the stored string format."""
+        try:
+            if not stored_value or "$" not in str(stored_value):
+                return False
+            
+            # For backward compatibility or if we stored as bytes
+            if isinstance(stored_value, bytes):
+                stored_value = stored_value.decode('utf-8')
+
+            parts = stored_value.split('$')
+            if len(parts) != 4:
+                return False
+            
+            _, iterations, salt, _ = parts
+            return self._hash_password(password, salt) == stored_value
+        except Exception:
+            return False
+
     def login(self, email, password):
         """Authenticates user via MongoDB."""
         if self.db is None:
@@ -67,9 +101,9 @@ class AuthManager:
             if not user:
                 return False, "Email không tồn tại."
 
-            # Check password hash
-            stored_hash = user.get("password_hash")
-            if bcrypt.checkpw(password.encode('utf-8'), stored_hash):
+            # Check password
+            stored_val = user.get("password_hash")
+            if self._verify_password(password, stored_val):
                 session_data = {
                     "email": user["email"],
                     "id": str(user["_id"]),
@@ -95,9 +129,8 @@ class AuthManager:
             if users.find_one({"email": email_lower}):
                 return False, "Email đã được đăng ký."
 
-            # Hash password
-            salt = bcrypt.gensalt()
-            pw_hash = bcrypt.hashpw(password.encode('utf-8'), salt)
+            # Create secure hash
+            pw_hash = self._hash_password(password)
 
             import datetime
             new_user = {

@@ -142,31 +142,29 @@ def apply_update(zip_path: str) -> tuple[bool, str]:
     try:
         # ---- 1A. FROZEN MODE (.EXE) ----
         if getattr(sys, 'frozen', False):
-            exe_path = sys.executable
-            exe_dir = os.path.dirname(exe_path)
-            old_exe_path = exe_path + ".old"
-
-            # Rename current running .exe to .old to bypass write lock
-            if os.path.exists(old_exe_path):
-                os.remove(old_exe_path)
-            os.rename(exe_path, old_exe_path)
-
+            exe_dir = os.path.dirname(sys.executable)
+            
             with zipfile.ZipFile(zip_path, "r") as zf:
-                # Find the .exe inside the zip (usually just 1 .exe from Github Release)
-                exe_member = None
+                exe_found = False
                 for member in zf.infolist():
                     if member.filename.lower().endswith(".exe"):
-                        exe_member = member
-                        break
+                        exe_found = True
+                        target_path = os.path.join(exe_dir, member.filename)
+                        
+                        # If the target is the currently running exe, use .old trick
+                        if os.path.normpath(target_path) == os.path.normpath(sys.executable):
+                            old_exe = target_path + ".old"
+                            if os.path.exists(old_exe):
+                                try: os.remove(old_exe)
+                                except: pass
+                            os.rename(target_path, old_exe)
+                        
+                        # Extract the new exe
+                        with zf.open(member) as src, open(target_path, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
                 
-                if not exe_member:
-                    # Rollback
-                    os.rename(old_exe_path, exe_path)
-                    return False, "Không tìm thấy file .exe trong bản cập nhật."
-
-                # Extract the new .exe exactly to the original exe_path
-                with zf.open(exe_member) as src, open(exe_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+                if not exe_found:
+                    return False, "Không tìm thấy file thực thi (.exe) trong bản cập nhật."
 
         # ---- 1B. SOURCE DEV MODE (.PY) ----
         else:

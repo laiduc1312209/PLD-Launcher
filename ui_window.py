@@ -843,7 +843,7 @@ class PLDLauncher(FluentWindow):
         w = MessageBox("Đăng xuất", "Bạn có chắc muốn đăng xuất?", self)
         if w.exec():
             AuthManager().logout()
-            os.execl(sys.executable, sys.executable, *sys.argv)
+            restart_app()
 
     # ══════════════════════════════════════════
     #  Auto-Update
@@ -856,15 +856,23 @@ class PLDLauncher(FluentWindow):
     def _on_update_available(self, version, url, changelog):
         msg = (
             f"Phiên bản mới {version} đã sẵn sàng!\n\n"
-            f"{changelog}\n\n"
-            f"Bạn có muốn cập nhật ngay?"
+            f"Vui lòng chạy Update.exe để cập nhật bản mới nhất nhằm đảm bảo tính ổn định."
         )
         w = MessageBox("🚀 Có bản cập nhật mới!", msg, self)
-        w.yesButton.setText("Cập nhật ngay")
+        w.yesButton.setText("Mở Update.exe")
         w.cancelButton.setText("Để sau")
 
         if w.exec():
-            self._start_update_download(url)
+            # Close app and open bootstrapper
+            update_exe = "bootstrapper.exe" if getattr(sys, 'frozen', False) else "bootstrapper.py"
+            import subprocess
+            if getattr(sys, 'frozen', False):
+                path = os.path.join(os.path.dirname(sys.executable), update_exe)
+                if os.path.exists(path):
+                    subprocess.Popen([path])
+            else:
+                subprocess.Popen([sys.executable, update_exe])
+            sys.exit(0)
 
     def _start_update_download(self, url):
         # Show progress on detail page

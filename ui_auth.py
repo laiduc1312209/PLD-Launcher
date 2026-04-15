@@ -17,6 +17,17 @@ from qfluentwidgets import (
 from auth_manager import AuthManager
 
 
+import os
+import sys
+
+def resource_path(relative_path):
+    """Resolve path for both dev and PyInstaller frozen mode."""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, relative_path)
+
 class AuthPage(QWidget):
     auth_success = Signal()
 
@@ -31,6 +42,12 @@ class AuthPage(QWidget):
         self.setFixedSize(420, 560)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setStyleSheet("AuthPage { background-color: #202020; border-radius: 12px; }")
+        
+        # Set Window Icon
+        icon_path = resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            from PySide6.QtGui import QIcon
+            self.setWindowIcon(QIcon(icon_path))
 
         main_lay = QVBoxLayout(self)
         main_lay.setContentsMargins(0, 0, 0, 0)
@@ -56,9 +73,10 @@ class AuthPage(QWidget):
         panel_lay.addSpacing(4)
 
         # Logo
-        logo = IconWidget("icon.ico")
-        logo.setFixedSize(64, 64)
-        panel_lay.addWidget(logo, alignment=Qt.AlignmentFlag.AlignCenter)
+        if os.path.exists(icon_path):
+            logo = IconWidget(icon_path)
+            logo.setFixedSize(64, 64)
+            panel_lay.addWidget(logo, alignment=Qt.AlignmentFlag.AlignCenter)
 
         panel_lay.addSpacing(14)
 
