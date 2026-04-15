@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['bootstrapper.py'],
     pathex=[],
     binaries=[],
     datas=[('icon.ico', '.')],
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='main',
+    name='Update',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

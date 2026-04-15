@@ -1,9 +1,18 @@
 import sys
 import os
 
-# IMPORTANT: Import boto3/botocore BEFORE PySide6 to avoid
-# shiboken6 import hook conflict with the 'six' library.
-import boto3  # noqa: F401
+# --- Robust Fix for 'SixMetaPathImporter' error ---
+if getattr(sys, 'frozen', False):
+    import types
+    # Fake the six.moves module if it's causing issues with botocore/boto3
+    if 'six.moves' not in sys.modules:
+        m = types.ModuleType('six.moves')
+        sys.modules['six.moves'] = m
+    # Pre-import botocore before any other potential conflicts
+    try:
+        import botocore  # noqa: F401
+    except ImportError:
+        pass
 
 from PySide6.QtCore import QLockFile, QDir, Qt
 from PySide6.QtGui import QFont, QIcon

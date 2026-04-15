@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "download_url": "https://github.com/laiduc1312209/PLD-Launcher/releases/latest/download/PLD-Launcher.zip",
   "changelog": "Fix bcrypt module error, separate Update/Launcher logic, and fix UI icons"
 }

@@ -2,7 +2,7 @@ import sys
 import os
 import subprocess
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QProgressBar
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from qfluentwidgets import SubtitleLabel, CaptionLabel, PrimaryPushButton, setTheme, Theme, setThemeColor
 
 from updater import CheckUpdateWorker, DownloadUpdateWorker, apply_update
@@ -60,51 +60,39 @@ class Bootstrapper(QWidget):
         layout.addWidget(self.progress)
 
     def _check_update(self):
-        # Đường dẫn file Launcher chính
+        # Đường dẫn file Launcher chính (Dùng os.path.abspath để chính xác)
         launcher_exe = "main.exe" if getattr(sys, 'frozen', False) else "main.py"
-        launcher_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), launcher_exe)
+        self.launcher_path = os.path.join(os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)), launcher_exe)
         
-        # Nếu chưa có file chính (Chưa cài), bắt buộc phải tải về
-        self.is_first_install = not os.path.exists(launcher_path)
-        
-        if self.is_first_install:
-            self.title_lbl.setText("Đang cài đặt lần đầu...")
-            self.status_lbl.setText("Đang lấy thông tin máy chủ...")
+        self.is_first_install = not os.path.exists(self.launcher_path)
         
         self.checker = CheckUpdateWorker()
         self.checker.update_available.connect(self._on_update_found)
-        
-        # Nếu không có bản cập nhật nhưng file chính bị thiếu, vẫn phải tải
-        def handle_no_update():
-            if self.is_first_install:
-                # Ép buộc tải bằng cách lấy URL từ checker
-                # Lưu ý: Cần lấy URL từ checker, tôi sẽ cập nhật updater.py để hỗ trợ lấy URL kể cả khi không có update
-                self.checker.force_url_fetch = True 
-                self.checker.start() 
-            else:
-                self._launch_launcher()
-
-        self.checker.no_update.connect(lambda: self._on_force_install_check() if self.is_first_install else self._launch_launcher())
+        self.checker.latest_info.connect(self._on_latest_info_received)
+        self.checker.no_update.connect(lambda: self._on_no_update_found())
         self.checker.error.connect(lambda e: self._launch_launcher() if not self.is_first_install else self.status_lbl.setText(f"Lỗi kết nối: {e}"))
         self.checker.start()
 
-    def _on_force_install_check(self):
-        """Hỗ trợ lấy link tải khi cài mới mà checker báo 'không có update'."""
-        # Gọi lại checker nhưng lấy thông tin để tải
-        self.status_lbl.setText("Đang tải dữ liệu gốc...")
-        self._check_and_download_latest()
+    def _on_latest_info_received(self, version, url, changelog):
+        # Lưu lại thông tin mới nhất để dùng khi cần ép buộc tải
+        self.latest_url = url
+        self.latest_version = version
 
-    def _check_and_download_latest(self):
-        # Logic này sẽ được tối ưu trong updater.py để trả về URL ngay cả khi không có update
-        pass
+    def _on_no_update_found(self):
+        if self.is_first_install:
+            self.title_lbl.setText("Đang cài đặt dữ liệu gốc...")
+            # Đợi một chút để tín hiệu latest_info tới (nếu nó tới sau - thực tế nó tới trước)
+            QTimer.singleShot(500, lambda: self._on_update_found(self.latest_version, self.latest_url, "Cài đặt lần đầu"))
+        else:
+            self._launch_launcher()
 
     def _on_update_found(self, version, url, changelog):
         if self.is_first_install:
-            self.title_lbl.setText(f"Đang cài đặt phiên bản v{version}")
+            self.title_lbl.setText(f"Đang cài đặt v{version}")
         else:
-            self.title_lbl.setText(f"Có bản cập nhật mới: v{version}")
+            self.title_lbl.setText(f"Cập nhật v{version}")
             
-        self.status_lbl.setText("Đang tải dữ liệu...")
+        self.status_lbl.setText("Đang chuẩn bị tải...")
         self.progress.show()
         
         self.downloader = DownloadUpdateWorker(url)

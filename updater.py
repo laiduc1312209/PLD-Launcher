@@ -46,6 +46,9 @@ class CheckUpdateWorker(QThread):
     update_available = Signal(str, str, str)
     no_update = Signal()
     error = Signal(str)
+    
+    # New signal to always get info (for fresh install)
+    latest_info = Signal(str, str, str)
 
     def run(self):
         try:
@@ -60,6 +63,9 @@ class CheckUpdateWorker(QThread):
             remote_ver = data.get("version", "0.0.0")
             download_url = data.get("download_url", "")
             changelog = data.get("changelog", "")
+
+            # Always emit latest info
+            self.latest_info.emit(remote_ver, download_url, changelog)
 
             if is_newer(remote_ver):
                 self.update_available.emit(remote_ver, download_url, changelog)
